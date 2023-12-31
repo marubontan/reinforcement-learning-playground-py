@@ -90,10 +90,11 @@ if __name__ == "__main__":
     env = gym.make("FrozenLake-v1", map_name="8x8", is_slippery=False)
     agent = DQNAgent(0.9, 0.001, 0.1, 1000, 64, 4)
     reward_history = []
-    episodes_per_iteration = 200
+    episodes_per_iteration = 500
     evaluation_episodes = 30
+    episodes = 5000
 
-    for episode in range(5000):
+    for episode in range(episodes):
         state, _ = env.reset()
         total_reward = 0.0
         terminated = False
@@ -126,4 +127,18 @@ if __name__ == "__main__":
 
         if episode % 50 == 0:
             agent.sync_qnet()
+        
+        if episode == episodes - 1:
+            env = gym.make("FrozenLake-v1", map_name="8x8", is_slippery=False, render_mode="human")
+            eval_state, _ = env.reset()
+            eval_terminated = False
+            eval_truncated = False
+            while True:
+                eval_action = agent.get_action(eval_state)
+                eval_new_state, eval_reward, eval_terminated, eval_truncated, _ = env.step(eval_action)
+                if eval_terminated or eval_truncated:
+                    break
+                eval_state = eval_new_state
+            env.render()
+
     
