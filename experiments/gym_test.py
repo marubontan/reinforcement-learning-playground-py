@@ -85,14 +85,14 @@ class ReplayBuffer:
 if __name__ == "__main__":
     episodes = 300
     sync_interval = 20
-    env = gym.make('CartPole-v0')
+    env = gym.make('CartPole-v0', render_mode="human")
     agent = DQNAgent(gamma=0.99, lr=0.001, epsilon=0.1, buffer_size=10000, batch_size=32, action_size=2)
     reward_history = []
 
     for episode in range(episodes):
         state, _ = env.reset()
         done = False
-        total_reward = 0
+        total_reward = 0.0
 
         while not done:
             action = agent.get_action(state)
