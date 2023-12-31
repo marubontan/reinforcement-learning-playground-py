@@ -45,7 +45,7 @@ class DQNAgent:
             return
         state, action, reward, next_state, done = self._replay_buffer.get_batch()
         qs = self._qnet(state)
-        q = qs[np.arange(len(action)), action]
+        q = qs[np.arange(self._batch_size), action]
 
         next_qs  = self._qnet_target(next_state)
         next_q = next_qs.max(1)[0]
@@ -90,13 +90,13 @@ if __name__ == "__main__":
     reward_history = []
 
     for episode in range(episodes):
-        state = env.reset()
+        state, _ = env.reset()
         done = False
         total_reward = 0
 
         while not done:
             action = agent.get_action(state)
-            next_state, reward, done, info = env.step(action)
+            next_state, reward, done, _, _ = env.step(action)
 
             agent.update(state, action, reward, next_state, done)
             state = next_state
