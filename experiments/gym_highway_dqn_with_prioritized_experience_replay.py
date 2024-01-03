@@ -1,4 +1,5 @@
-import math
+import os
+import argparse
 import matplotlib.pyplot as plt
 import random
 from collections import deque
@@ -168,6 +169,7 @@ class DQNAgent:
         q = qs[np.arange(self._batch_size), actions]
         next_qs = self._qnet_target(next_primary_car_state, next_other_cars_state)
         next_q = next_qs.max(1)[0]
+        next_q.detach()
         target = (rewards + (1 - terminated) * self._gamma * next_q).to(torch.float)
         loss = torch.nn.functional.mse_loss(q, target)
         self._optimizer.zero_grad()
@@ -177,10 +179,33 @@ class DQNAgent:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--predict", action="store_true")
+    args = parser.parse_args()
+    if args.predict:
+        env = gym.make("highway-v0", render_mode="human")
+        agent = DQNAgent(
+            gamma=0.9,
+            lr=0.01,
+            epsilon=0.5,
+            buffer_size=15000,
+            batch_size=64,
+            action_size=5,
+        )
+        agent._qnet.load_state_dict(torch.load("qnet.pth"))
+        agent._qnet_target.load_state_dict(torch.load("qnet.pth"))
+        state, _ = env.reset()
+        terminated = False
+        truncated = False
+        while not terminated and not truncated:
+            action = agent.get_action(state)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+        exit()
+
     env = gym.make("highway-fast-v0")
     agent = DQNAgent(
         gamma=0.9,
-        lr=0.01,
+        lr=0.001,
         epsilon=0.5,
         buffer_size=15000,
         batch_size=64,
@@ -191,6 +216,7 @@ if __name__ == "__main__":
     rewards = []
     total_loss = 0.0
     iter_num = 0
+    batch_reward_sum_averages = []
     for episode in range(episodes):
         state, _ = env.reset()
         terminated = False
@@ -213,20 +239,25 @@ if __name__ == "__main__":
                 iter_num += 1
         rewards.append(sum_reward)
         print(f"episode: {episode}, sum_reward: {sum_reward}, loss: {loss}")
-        if episode % 50 == 0:
+        if episode % 50 == 0 and episode != 0:
+            batch_reward_sum_averages.append(sum(rewards) / len(rewards))
+            rewards = []
             if iter_num != 0:
                 print(f"Average loss: {total_loss / iter_num}")
             total_loss = 0.0
             iter_num = 0
             agent.sync_qnet()
-            plt.plot(range(len(rewards)), rewards)
+            plt.plot(
+                [50 * (i + 1) for i in range(len(batch_reward_sum_averages))],
+                batch_reward_sum_averages,
+            )
             plt.savefig(f"rewards_1.png")
             plt.close()
-        if episode == episodes - 1:
-            env = gym.make("highway-v0", render_mode="human")
-            state, _ = env.reset()
-            terminated = False
-            truncated = False
-            while not terminated and not truncated:
-                action = agent.get_action(state)
-                next_state, reward, terminated, truncated, _ = env.step(action)
+    torch.save(agent._qnet.state_dict(), "qnet.pth")
+    env = gym.make("highway-v0", render_mode="human")
+    state, _ = env.reset()
+    terminated = False
+    truncated = False
+    while not terminated and not truncated:
+        action = agent.get_action(state)
+        next_state, reward, terminated, truncated, _ = env.step(action)
