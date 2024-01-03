@@ -111,9 +111,10 @@ class DQNAgent:
         qs = self._qnet(states)
         q = qs[np.arange(self._batch_size), actions]
 
-        next_qs = self._qnet_target(next_states)
-        next_q = next_qs.max(1)[0]
-        next_q.detach_()
+        next_qs_shadow = self._qnet(next_states)
+        next_qs_action = torch.argmax(next_qs_shadow, dim=1)
+        next_qs = self._qnet(next_states)
+        next_q = next_qs[range(len(next_qs)), next_qs_action]
 
         target = (rewards + (1 - terminated) * self._gamma * next_q).to(torch.float)
 
@@ -128,7 +129,7 @@ class DQNAgent:
 
 if __name__ == "__main__":
     env = gym.make("FrozenLake-v1", map_name="8x8", is_slippery=False)
-    agent = DQNAgent(0.9, 0.001, 0.1, 1000, 64, 4)
+    agent = DQNAgent(0.9, 0.001, 0.1, 10000, 64, 4)
     reward_history = []
     episodes_per_iteration = 500
     evaluation_episodes = 30
