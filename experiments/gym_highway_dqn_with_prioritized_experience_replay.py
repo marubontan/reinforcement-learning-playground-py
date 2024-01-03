@@ -10,10 +10,10 @@ import numpy as np
 class Qnet(torch.nn.Module):
     def __init__(self, action_size: int):
         super(Qnet, self).__init__()
-        self.fc1 = torch.nn.Linear(5, 64)
-        self.fc2 = torch.nn.Linear(20, 64)
-        self.fc3 = torch.nn.Linear(128, 256)
-        self.fc4 = torch.nn.Linear(256, action_size)
+        self.fc1 = torch.nn.Linear(5, 10)
+        self.fc2 = torch.nn.Linear(20, 10)
+        self.fc3 = torch.nn.Linear(20, 10)
+        self.fc4 = torch.nn.Linear(10, action_size)
 
     def forward(self, primary_car, others):
         x0 = torch.relu(self.fc1(primary_car))
@@ -106,7 +106,7 @@ class DQNAgent:
         self._optimizer = torch.optim.Adam(self._qnet.parameters(), lr=lr)
 
     def sync_qnet(self):
-        self._qnet.load_state_dict(self._qnet_target.state_dict())
+        self._qnet_target.load_state_dict(self._qnet.state_dict())
 
     def get_action(self, state: np.ndarray):
         if np.random.rand() < self._epsilon:
@@ -168,7 +168,6 @@ class DQNAgent:
         q = qs[np.arange(self._batch_size), actions]
         next_qs = self._qnet_target(next_primary_car_state, next_other_cars_state)
         next_q = next_qs.max(1)[0]
-        next_q.detach_()
         target = (rewards + (1 - terminated) * self._gamma * next_q).to(torch.float)
         loss = torch.nn.functional.mse_loss(q, target)
         self._optimizer.zero_grad()
@@ -181,10 +180,10 @@ if __name__ == "__main__":
     env = gym.make("highway-fast-v0")
     agent = DQNAgent(
         gamma=0.9,
-        lr=0.001,
+        lr=0.01,
         epsilon=0.5,
-        buffer_size=5000,
-        batch_size=32,
+        buffer_size=15000,
+        batch_size=64,
         action_size=5,
     )
     episodes = 50000
@@ -197,7 +196,7 @@ if __name__ == "__main__":
         terminated = False
         truncated = False
         sum_reward = 0.0
-        if episode % 300 == 0 and episode > 0.1:
+        if episode % 500 == 0 and episode > 0.1:
             agent._epsilon *= 0.9
         while not terminated and not truncated:
             action = agent.get_action(state)

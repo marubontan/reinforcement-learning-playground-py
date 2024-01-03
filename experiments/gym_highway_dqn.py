@@ -99,7 +99,7 @@ class DQNAgent:
         self._optimizer = torch.optim.Adam(self._qnet.parameters(), lr=lr)
 
     def sync_qnet(self):
-        self._qnet.load_state_dict(self._qnet_target.state_dict())
+        self._qnet_target.load_state_dict(self._qnet.state_dict())
 
     def get_action(self, state: np.ndarray):
         if np.random.rand() < self._epsilon:
