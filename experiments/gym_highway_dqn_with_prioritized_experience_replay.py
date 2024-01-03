@@ -25,6 +25,7 @@ class Qnet(torch.nn.Module):
 
 class ReplayBuffer:
     def __init__(self, buffer_size: int, batch_size: int):
+        self._buffer_size = buffer_size
         self._buffer = deque(maxlen=buffer_size)
         self._batch_size = batch_size
 
@@ -48,8 +49,7 @@ class ReplayBuffer:
     def get_batch(self):
         delta_sum = sum([d[6] for d in self._buffer])
         weights = [d[6] / delta_sum for d in self._buffer]
-
-        data = random.sample(self._buffer, weights=weights, k=self._batch_size)
+        data = random.choices(self._buffer, weights=weights, k=self._batch_size)
         primary_car_state = np.stack([d[0][0] for d in data])
         other_cars_state = np.stack([d[0][1:] for d in data])
 
@@ -111,7 +111,6 @@ class DQNAgent:
     def get_action(self, state: np.ndarray):
         if np.random.rand() < self._epsilon:
             action = np.random.choice(self._action_size)
-            print(f"Random Action Chosen: {action}")
         else:
             primary_car_state = state[0:1]
             other_cars_state = state[1:]
@@ -121,10 +120,9 @@ class DQNAgent:
             ).to(torch.float)
             q = self._qnet(primary_car_state, other_cars_state)
             action = torch.argmax(q).item()
-            print(f"action: {action}")
         return action
 
-    def update(
+    def add(
         self,
         state: np.ndarray,
         action: int,
@@ -133,8 +131,29 @@ class DQNAgent:
         terminated: bool,
         truncated: bool,
     ):
-        if len(self._replay_buffer) < self._replay_buffer._batch_size:
-            return
+        next_primary_car_state = next_state[0:1]
+        next_other_cars_state = next_state[1:]
+        next_primary_car_state = torch.tensor(next_primary_car_state).to(torch.float)
+        next_other_cars_state = torch.tensor(
+            next_other_cars_state.flatten()[np.newaxis, :]
+        ).to(torch.float)
+        q_next = self._qnet_target(next_primary_car_state, next_other_cars_state)
+        q_next_max = q_next.max().item()
+
+        primary_car_state = state[0:1]
+        other_cars_state = state[1:]
+        primary_car_state = torch.tensor(primary_car_state).to(torch.float)
+        other_cars_state = torch.tensor(other_cars_state.flatten()[np.newaxis, :]).to(
+            torch.float
+        )
+        q = self._qnet(primary_car_state, other_cars_state).detach().numpy()[0][action]
+        delta = abs(reward + self._gamma * (q_next_max - q))
+
+        self._replay_buffer.add(
+            state, action, reward, next_state, terminated, truncated, delta
+        )
+
+    def update(self):
         (
             primary_car_state,
             other_cars_state,
@@ -143,7 +162,7 @@ class DQNAgent:
             next_primary_car_state,
             next_other_cars_state,
             terminated,
-            truncated,
+            _,
         ) = self._replay_buffer.get_batch()
         qs = self._qnet(primary_car_state, other_cars_state)
         q = qs[np.arange(self._batch_size), actions]
@@ -155,10 +174,7 @@ class DQNAgent:
         self._optimizer.zero_grad()
         loss.backward()
         self._optimizer.step()
-        delta = abs(reward + self._gamma * (next_q - q))
-        self._replay_buffer.add(
-            state, action, reward, next_state, terminated, truncated, delta
-        )
+        return loss.detach().numpy()
 
 
 if __name__ == "__main__":
@@ -166,7 +182,7 @@ if __name__ == "__main__":
     agent = DQNAgent(
         gamma=0.9,
         lr=0.001,
-        epsilon=0.1,
+        epsilon=0.5,
         buffer_size=5000,
         batch_size=32,
         action_size=5,
@@ -174,20 +190,35 @@ if __name__ == "__main__":
     episodes = 50000
 
     rewards = []
+    total_loss = 0.0
+    iter_num = 0
     for episode in range(episodes):
         state, _ = env.reset()
         terminated = False
         truncated = False
         sum_reward = 0.0
+        if episode % 300 == 0 and episode > 0.1:
+            agent._epsilon *= 0.9
         while not terminated and not truncated:
             action = agent.get_action(state)
             next_state, reward, terminated, truncated, _ = env.step(action)
-            agent.update(state, action, reward, next_state, terminated, truncated)
+            agent.add(state, action, reward, next_state, terminated, truncated)
+            if len(agent._replay_buffer) >= agent._replay_buffer._buffer_size:
+                loss = agent.update()
+            else:
+                loss = 0.0
             state = next_state
             sum_reward += reward
+            if loss is not None:
+                total_loss += loss
+                iter_num += 1
         rewards.append(sum_reward)
-        print(f"episode: {episode}, sum_reward: {sum_reward}")
+        print(f"episode: {episode}, sum_reward: {sum_reward}, loss: {loss}")
         if episode % 50 == 0:
+            if iter_num != 0:
+                print(f"Average loss: {total_loss / iter_num}")
+            total_loss = 0.0
+            iter_num = 0
             agent.sync_qnet()
             plt.plot(range(len(rewards)), rewards)
             plt.savefig(f"rewards_1.png")
