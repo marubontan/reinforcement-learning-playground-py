@@ -11,10 +11,10 @@ import numpy as np
 class Qnet(torch.nn.Module):
     def __init__(self, action_size: int):
         super(Qnet, self).__init__()
-        self.fc1 = torch.nn.Linear(5, 10)
-        self.fc2 = torch.nn.Linear(20, 10)
-        self.fc3 = torch.nn.Linear(20, 10)
-        self.fc4 = torch.nn.Linear(10, action_size)
+        self.fc1 = torch.nn.Linear(5, 32)
+        self.fc2 = torch.nn.Linear(20, 32)
+        self.fc3 = torch.nn.Linear(64, 128)
+        self.fc4 = torch.nn.Linear(128, action_size)
 
     def forward(self, primary_car, others):
         x0 = torch.relu(self.fc1(primary_car))
